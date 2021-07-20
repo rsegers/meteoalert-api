@@ -2,7 +2,7 @@
 import sys
 import xmltodict
 import requests
-
+from datetime import datetime
 
 class WrongCountry(Exception):
     pass
@@ -10,10 +10,12 @@ class WrongCountry(Exception):
 
 class Meteoalert(object):
 
-    def __init__(self, country, province, language='en-GB'):
+    def __init__(self, country, province, language='en-GB', returnOnlyFirstAlert=True, skipExpiredAlerts=False):
         self.country = country.lower()
         self.province = province
         self.language = language
+        self.returnOnlyFirstAlert = returnOnlyFirstAlert
+        self.skipExpiredAlerts = skipExpiredAlerts
 
     def get_alert(self):
         """Retrieve alert data"""
@@ -34,6 +36,9 @@ class Meteoalert(object):
         feed_data = xmltodict.parse(text)
         feed = feed_data.get('feed', [])
         entries = feed.get('entry', [])
+
+        alerts = []
+
         for entry in (entries if type(entries) is list else [entries]):
             if entry.get('cap:areaDesc') != self.province:
                 continue
@@ -90,5 +95,16 @@ class Meteoalert(object):
             except:
                 pass
                 pass
-            break
-        return data
+            
+            if self.skipExpiredAlerts and "expires" in data:
+                alertExpires = datetime.fromisoformat(data["expires"])
+                alertExpired = alertExpires <= datetime.now(alertExpires.tzinfo)
+                if alertExpired:
+                    continue
+        
+            alerts.append(data.copy())
+
+        if self.returnOnlyFirstAlert and len(alerts) > 0:
+            return alerts[0]
+        else:
+            return alerts
